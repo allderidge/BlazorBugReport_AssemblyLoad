@@ -1,0 +1,66 @@
+﻿@page "/"
+@using System.Reflection
+@using AssemblyLoadTest.Shared
+@inject HttpClient Client
+
+<h1>Assembly Load Information</h1>
+
+<table class="table">
+    <thead>
+    <tr>
+        <th scope="col">Test</th>
+        <th scope="col">Outcome</th>
+    </tr>
+    </thead>
+    <tbody>
+        <tr><th scope="row">Shared Assembly Matches</th><td>@SharedAssemblyMatches</td></tr>
+        <tr><th scope="row">Shared Interface Matches</th><td>@SharedInterfaceMatches</td></tr>
+        <tr><th scope="row">Dynamic Type can cast</th><td>@CanCast</td></tr>
+        <tr><th scope="row">Name via Shared Interface</th><td>@Name</td></tr>
+        <tr><th scope="row">Exception</th><td>@ExceptionText</td></tr>
+    </tbody>
+
+</table>
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var assemblyData = await Client.GetFromJsonAsync<DynamicAssembly>("Assembly");
+            var assembly = Assembly.Load(assemblyData.AssemblyDllBytes, assemblyData.AssemblyPdbBytes);
+
+            var dynamicType = assembly.GetType("AssemblyLoadTest.Dynamic.SharedInterfaceImplementation", true) ?? throw new ApplicationException("Unable to load dynamic type");
+            var sharedInterface = dynamicType.GetInterfaces().First(e => e.Name == nameof(ISharedInterface));
+            SharedAssemblyMatches = sharedInterface.Assembly == typeof(ISharedInterface).Assembly;
+            SharedInterfaceMatches = sharedInterface == typeof(ISharedInterface);
+
+            var instance = Activator.CreateInstance(dynamicType);
+            CanCast = instance is ISharedInterface;
+
+            Name = ((ISharedInterface)instance).HelloWorldName;
+        }
+        catch (Exception e)
+        {
+            ExceptionText = e.ToString();
+        }
+        await base.OnInitializedAsync();
+    }
+
+    public bool CanCast { get; set; }
+
+    public string Name { get; set; }
+
+    public bool? SharedAssemblyMatches { get; set; }
+
+    public bool? SharedInterfaceMatches { get; set; }
+
+    public string ExceptionText { get; set; }
+
+
+    public class DynamicAssembly
+    {
+        public byte[] AssemblyDllBytes { get; set; }
+        public byte[] AssemblyPdbBytes { get; set; }
+    }
+}
